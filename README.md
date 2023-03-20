@@ -1,6 +1,6 @@
 # PC - Verão 22/23 - Série de exercícios
 
-Repositório com a resolução das séries do aluno [editar com número].
+Repositório com a resolução das séries do aluno 47224.
 Por favor, crie também o ficheiro `ids.md` contendo apenas o seu número de aluno.
 
 ## Observações
