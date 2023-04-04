@@ -8,7 +8,7 @@ import kotlin.concurrent.withLock
 class NAryExchanger<T>(private val groupSize: Int) {
 
     init {
-        require (groupSize < 2) { throw IllegalArgumentException("groupSize cannot be less than 2") }
+        require (groupSize >= 2) { throw IllegalArgumentException("groupSize cannot be less than 2") }
     }
 
     private val lock = ReentrantLock()
@@ -44,8 +44,8 @@ class NAryExchanger<T>(private val groupSize: Int) {
             while (true) {
                 try {
                     remainingTime = groupWaiters.awaitNanos(remainingTime)
-                } catch (e: InterruptedException) {     // in case thread is interrupted right when it's done
-                    if (request.isDone) return request.values
+                } catch (e: InterruptedException) {
+                    if (request.isDone) return request.values   // in case thread is interrupted right when it's done
                     removeThreadFromGroupWaiters(value, request)
                     throw e
                 }

@@ -44,10 +44,11 @@ class NAryExchangerTests {
             thread {
                 val list = exchanger.exchange("thread $it", Duration.INFINITE)
                 assertNotNull(list)
-                //assertEquals(N-1, list.size)
+                assertEquals(N, list.size)
             }
         }
-        assertNull(exchanger.exchange("never", 5.toDuration(DurationUnit.SECONDS)))
+        Thread.sleep(1000)
+        assertNull(exchanger.exchange("never", 1.toDuration(DurationUnit.SECONDS)))
     }
 
     @Test
