@@ -45,7 +45,10 @@ class NAryExchanger<T>(private val groupSize: Int) {
                 try {
                     remainingTime = groupWaiters.awaitNanos(remainingTime)
                 } catch (e: InterruptedException) {
-                    if (request.isDone) return request.values   // in case thread is interrupted right when it's done
+                    if (request.isDone) {   // in case thread is interrupted right when it's done
+                        Thread.currentThread().interrupt()
+                        return request.values
+                    }
                     removeThreadFromGroupWaiters(value, request)
                     throw e
                 }

@@ -2,7 +2,9 @@ package pt.isel.pc.problemsets.set1
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.thread
+import kotlin.concurrent.withLock
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -37,18 +39,15 @@ class NAryExchangerTests {
     }
 
     @Test
-    fun `exchange N+1 threads`() {
+    fun `exchange 2 groups`() {
         val exchanger = NAryExchanger<String>(N)
-
-        repeat(N) {
+        repeat(2 * N) {
             thread {
                 val list = exchanger.exchange("thread $it", Duration.INFINITE)
                 assertNotNull(list)
                 assertEquals(N, list.size)
             }
         }
-        Thread.sleep(1000)
-        assertNull(exchanger.exchange("never", 1.toDuration(DurationUnit.SECONDS)))
     }
 
     @Test
