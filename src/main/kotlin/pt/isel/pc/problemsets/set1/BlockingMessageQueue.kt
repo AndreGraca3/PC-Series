@@ -2,32 +2,20 @@ package pt.isel.pc.problemsets.set1
 
 import java.util.concurrent.locks.Condition
 import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.thread
 import kotlin.concurrent.withLock
 import kotlin.time.Duration
-import kotlin.time.DurationUnit
-import kotlin.time.toDuration
 
 
 class BlockingMessageQueue<T>(private val capacity: Int) {
 
     private val lock = ReentrantLock()
 
-    var producers = mutableListOf<ProducerRequest>()
-    var consumers = mutableListOf<ConsumerRequest>()
+    private var producers = mutableListOf<Request>()
+    private var consumers = mutableListOf<Request>()
 
-    private val producersWaiters = lock.newCondition()
+    private var items = mutableListOf<T>()
 
-    var items = mutableListOf<T>()
-
-    inner class ProducerRequest(
-        val msg: T,
-        var isDone: Boolean = false
-    )
-
-    inner class ConsumerRequest(
-        val nrOfMessages: Int,
-        var values: MutableList<T> = mutableListOf(),
+    private inner class Request(
         val condition: Condition = lock.newCondition(),
         var isDone: Boolean = false
     )
@@ -43,15 +31,15 @@ class BlockingMessageQueue<T>(private val capacity: Int) {
             }
 
             // wait path
-            val request = ProducerRequest(message)
+            val request = Request()
             producers.add(request)
             var remainingTime = timeout.inWholeNanoseconds
 
             while (true) {
                 try {
-                    remainingTime = producersWaiters.awaitNanos(remainingTime)
+                    remainingTime = request.condition.awaitNanos(remainingTime)
                 } catch (e: InterruptedException) {
-                    if (request.isDone && items.size + 1 <= capacity) {   // in case thread is interrupted right when it's done
+                    if (request.isDone && items.size + 1 <= capacity) {
                         items.add(message)
                         if (consumers.isNotEmpty()) consumers.first().condition.signal()
                         Thread.currentThread().interrupt()
@@ -81,39 +69,20 @@ class BlockingMessageQueue<T>(private val capacity: Int) {
     fun tryDequeue(nOfMessages: Int, timeout: Duration): List<T>? {
         lock.withLock {
             if (consumers.isEmpty() && items.size >= nOfMessages) {
-                val list = ArrayList(items.subList(0, nOfMessages))
-                for (i in 0 until nOfMessages) {
-                    items.removeFirst()
-                }
-                if (nOfMessages > producers.size) {
-                    producers.forEach { it.isDone = true }
-                } else {
-                    producers.subList(0, nOfMessages).forEach { it.isDone = true }
-                }
-                producersWaiters.signalAll()
-                return list
+                return consume(nOfMessages)
             }
-            val request = ConsumerRequest(nOfMessages)
-            consumers.add(request)
 
+            val request = Request()
+            consumers.add(request)
             var remainingTime = timeout.inWholeNanoseconds
 
             while (true) {
                 try {
                     remainingTime = request.condition.awaitNanos(remainingTime)
                 } catch (e: InterruptedException) {
-                    if (request.isDone) {   // in case thread is interrupted right when it's done
-                        val list = ArrayList(items.subList(0, nOfMessages))
-                        for (i in 0 until nOfMessages) {
-                            items.removeFirst()
-                        }
+                    if (request.isDone) {
+                        val list = consume(nOfMessages)
                         consumers.remove(request)
-                        if (nOfMessages > producers.size) {
-                            producers.forEach { it.isDone = true }
-                        } else {
-                            producers.subList(0, nOfMessages).forEach { it.isDone = true }
-                        }
-                        producersWaiters.signalAll()
                         Thread.currentThread().interrupt()
                         return list
                     }
@@ -121,18 +90,9 @@ class BlockingMessageQueue<T>(private val capacity: Int) {
                     throw e
                 }
 
-                if (request.isDone && items.size >= request.nrOfMessages) {
-                    val list = ArrayList(items.subList(0, nOfMessages))
-                    for (i in 0 until nOfMessages) {
-                        items.removeFirst()
-                    }
+                if (request.isDone && items.size >= nOfMessages) {
+                    val list = consume(nOfMessages)
                     consumers.remove(request)
-                    if (nOfMessages > producers.size) {
-                        producers.forEach { it.isDone = true }
-                    } else {
-                        producers.subList(0, nOfMessages).forEach { it.isDone = true }
-                    }
-                    producersWaiters.signalAll()
                     if (consumers.isNotEmpty()) {
                         val next = consumers.first()
                         next.isDone = true
@@ -152,5 +112,24 @@ class BlockingMessageQueue<T>(private val capacity: Int) {
                 }
             }
         }
+    }
+
+    private fun consume(nOfMessages: Int): List<T> {
+        val list = ArrayList(items.subList(0, nOfMessages))
+        for (i in 0 until nOfMessages) {
+            items.removeFirst()
+        }
+        if (nOfMessages > producers.size) {
+            producers.forEach {
+                it.isDone = true
+                it.condition.signal()
+            }
+        } else {
+            producers.subList(0, nOfMessages).forEach {
+                it.isDone = true
+                it.condition.signal()
+            }
+        }
+        return list
     }
 }
