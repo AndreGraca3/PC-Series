@@ -1,21 +1,37 @@
 package pt.isel.pc.problemsets.set1
 
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.Condition
 import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.thread
 import kotlin.concurrent.withLock
 import kotlin.time.Duration
+import kotlin.time.DurationUnit
+import kotlin.time.toDuration
 
 
 class BlockingMessageQueue<T>(private val capacity: Int) {
 
     private val lock = ReentrantLock()
 
-    private var producers = mutableListOf<Request>()
-    private var consumers = mutableListOf<Request>()
+    val producersSize get() = lock.withLock { producers.size }
+    val consumersSize get() = lock.withLock { consumers.size }
+    val queueSize get() = lock.withLock { items.size }
 
-    private var items = mutableListOf<T>()
+    private var producers = mutableListOf<ProducerRequest>()
+    private var consumers = mutableListOf<ConsumerRequest>()
 
-    private inner class Request(
+     var items = mutableListOf<T>()
+
+    private inner class ConsumerRequest(
+        val nOfMessages: Int,
+        var values: MutableList<T> = mutableListOf(),
+        val condition: Condition = lock.newCondition(),
+        var isDone: Boolean = false
+    )
+
+    private inner class ProducerRequest(
+        var item: T,
         val condition: Condition = lock.newCondition(),
         var isDone: Boolean = false
     )
@@ -25,13 +41,23 @@ class BlockingMessageQueue<T>(private val capacity: Int) {
         lock.withLock {
             // fast path
 
+            if (consumers.isNotEmpty() && items.size + 1 == consumers.first().nOfMessages) {
+                val consumerReq = consumers.removeFirst()
+                items.add(message)
+                consumerReq.values = items
+                items = mutableListOf()
+                consumerReq.isDone = true
+                consumerReq.condition.signal()
+                return true
+            }
+
             if (items.size + 1 <= capacity) {
                 items.add(message)
                 return true
             }
 
             // wait path
-            val request = Request()
+            val request = ProducerRequest(message)
             producers.add(request)
             var remainingTime = timeout.inWholeNanoseconds
 
@@ -39,23 +65,15 @@ class BlockingMessageQueue<T>(private val capacity: Int) {
                 try {
                     remainingTime = request.condition.awaitNanos(remainingTime)
                 } catch (e: InterruptedException) {
-                    if (request.isDone && items.size + 1 <= capacity) {
-                        items.add(message)
-                        if (consumers.isNotEmpty()) consumers.first().condition.signal()
+                    if (request.isDone) {
                         Thread.currentThread().interrupt()
-                        producers.remove(request)
                         return true
                     }
                     producers.remove(request)
                     throw e
                 }
 
-                if (request.isDone && items.size + 1 <= capacity) {
-                    items.add(message)
-                    if (consumers.isNotEmpty()) consumers.first().condition.signal()
-                    producers.remove(request)
-                    return true
-                }
+                if (request.isDone) return true
 
                 if (remainingTime <= 0) {
                     producers.remove(request)
@@ -67,12 +85,18 @@ class BlockingMessageQueue<T>(private val capacity: Int) {
 
     @Throws(InterruptedException::class)
     fun tryDequeue(nOfMessages: Int, timeout: Duration): List<T>? {
+
+        require(nOfMessages <= capacity + 1) { "nOfMessages $nOfMessages exceeds limit ${capacity + 1}" }
+
         lock.withLock {
+            // fast path
+
             if (consumers.isEmpty() && items.size >= nOfMessages) {
                 return consume(nOfMessages)
             }
 
-            val request = Request()
+            // wait path
+            val request = ConsumerRequest(nOfMessages)
             consumers.add(request)
             var remainingTime = timeout.inWholeNanoseconds
 
@@ -81,33 +105,17 @@ class BlockingMessageQueue<T>(private val capacity: Int) {
                     remainingTime = request.condition.awaitNanos(remainingTime)
                 } catch (e: InterruptedException) {
                     if (request.isDone) {
-                        val list = consume(nOfMessages)
-                        consumers.remove(request)
                         Thread.currentThread().interrupt()
-                        return list
+                        return request.values
                     }
                     consumers.remove(request)
                     throw e
                 }
 
-                if (request.isDone && items.size >= nOfMessages) {
-                    val list = consume(nOfMessages)
-                    consumers.remove(request)
-                    if (consumers.isNotEmpty()) {
-                        val next = consumers.first()
-                        next.isDone = true
-                        next.condition.signal()
-                    }
-                    return list
-                }
+                if (request.isDone) return request.values
 
                 if (remainingTime <= 0) {
                     consumers.remove(request)
-                    if (consumers.isNotEmpty()) {
-                        val next = consumers.first()
-                        next.isDone = true
-                        next.condition.signal()
-                    }
                     return null
                 }
             }
@@ -118,16 +126,11 @@ class BlockingMessageQueue<T>(private val capacity: Int) {
         val list = ArrayList(items.subList(0, nOfMessages))
         for (i in 0 until nOfMessages) {
             items.removeFirst()
-        }
-        if (nOfMessages > producers.size) {
-            producers.forEach {
-                it.isDone = true
-                it.condition.signal()
-            }
-        } else {
-            producers.subList(0, nOfMessages).forEach {
-                it.isDone = true
-                it.condition.signal()
+            if (producers.isNotEmpty()) {
+                val producerReq = producers.removeFirst()
+                items.add(producerReq.item)
+                producerReq.isDone = true
+                producerReq.condition.signal()
             }
         }
         return list
