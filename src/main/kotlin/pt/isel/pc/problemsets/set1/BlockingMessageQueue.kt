@@ -1,13 +1,9 @@
 package pt.isel.pc.problemsets.set1
 
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.Condition
 import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.thread
 import kotlin.concurrent.withLock
 import kotlin.time.Duration
-import kotlin.time.DurationUnit
-import kotlin.time.toDuration
 
 
 class BlockingMessageQueue<T>(private val capacity: Int) {
