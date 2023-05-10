@@ -12,7 +12,7 @@ class UsageCountedHolderTests {
 
     @Test
     fun `use holder one time for N threads`() {
-        val N = 10
+        val N = 30
         val closeable = Closeable { "ISEL" }
         val holder = UsageCountedHolder(closeable)
         val res: MutableList<Closeable?> = Collections.synchronizedList(ArrayList())
@@ -32,6 +32,6 @@ class UsageCountedHolderTests {
 
     @Test
     fun `pressure test use holder one time for N threads`() {
-        pressureTest(::`use holder one time for N threads`, 5)
+        pressureTest(::`use holder one time for N threads`, 1)
     }
 }

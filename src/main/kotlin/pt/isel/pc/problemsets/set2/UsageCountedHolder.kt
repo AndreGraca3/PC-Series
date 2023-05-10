@@ -7,17 +7,14 @@ import java.util.concurrent.atomic.AtomicReference
 
 class UsageCountedHolder<T : Closeable>(value: T) {
 
-    @Volatile
     private var value = AtomicReference(value)
-
-    @Volatile
     private var useCounter = AtomicInteger(1)
 
     fun tryStartUse(): T? {
         while (true) {
             val counter = useCounter.get()
             val res = value.get() ?: return null
-            if (useCounter.compareAndSet(counter, counter + 1)) {
+            if (value.get() != null && useCounter.compareAndSet(counter, counter + 1)) {
                 return res
             }
         }
@@ -33,6 +30,7 @@ class UsageCountedHolder<T : Closeable>(value: T) {
                 value.get()?.close()
                 value.compareAndSet(res, null)
             }
+            return
         }
     }
 }

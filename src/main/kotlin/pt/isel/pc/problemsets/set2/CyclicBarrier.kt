@@ -2,7 +2,6 @@ package pt.isel.pc.problemsets.set2
 
 import java.util.concurrent.BrokenBarrierException
 import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.thread
 import kotlin.concurrent.withLock
 
 class CyclicBarrier(private val parties: Int) {
@@ -15,9 +14,8 @@ class CyclicBarrier(private val parties: Int) {
     private val waiters = lock.newCondition()
 
     private var barrierAction: Runnable? = null
-    private var isBroken = false
     private var waitingThreads = 0
-    private var id = 0
+    private var generation = Generation(false)
 
     constructor(parties: Int, barrierAction: Runnable) : this(parties) {
         this.barrierAction = barrierAction
@@ -25,31 +23,41 @@ class CyclicBarrier(private val parties: Int) {
 
     fun await(): Int {
         lock.withLock {
-            if (isBroken) throw BrokenBarrierException()
-            val id = id
+            if (generation.isBroken) throw BrokenBarrierException()
+            val gen = generation
             var idx = 0
-
-            if(getParties() == 1) {
-                println("T${Thread.currentThread().id}:: Tripping Barrier ::")
-                isBroken = true
-                barrierAction?.run()
+            // fast path
+            if(waitingThreads == parties - 1) { // Last Thread to form group
+                try {
+                    barrierAction?.run()
+                } catch (e: Exception) {
+                    gen.isBroken = true
+                    throw BrokenBarrierException()
+                }
                 waiters.signalAll()
-                this.id++
+                waitingThreads = 0
+                return idx
             } else {
-                waitingThreads++
-                idx = getParties()
-                println("T${Thread.currentThread().id}:: Awaiting for $idx threads to trip the barrier")
-                while (!isBroken && id == this.id) {
-                    waiters.await()
+                idx = parties - ++waitingThreads
+                // wait path
+                while (true) {
+                    try {
+                        waiters.await()
+                        if (gen.isBroken) throw BrokenBarrierException()
+                        return idx
+                    } catch (e: InterruptedException) {
+                        gen.isBroken = true
+                        waiters.signalAll()
+                        throw e
+                    }
                 }
             }
-            return idx
         }
     }
 
     fun getParties(): Int {
         lock.withLock {
-            return parties - waitingThreads
+            return parties
         }
     }
 
@@ -61,41 +69,18 @@ class CyclicBarrier(private val parties: Int) {
 
     fun isBroken(): Boolean {
         lock.withLock {
-            return isBroken
+            return generation.isBroken
         }
     }
 
     fun reset() {
-        TODO("Docs say to throw BarrierBrokenException if the barrier is reset while any thread is waiting")
-
-        println(":: Resetting Barrier ::")
         lock.withLock {
+            generation.isBroken = true
+            generation = Generation(false)
             waiters.signalAll()
-            this.id++
-            isBroken = false
             waitingThreads = 0
         }
     }
-}
 
-
-fun main() {
-    val N = 3
-    val barrier = CyclicBarrier(N) { println("Im Done") }
-
-    repeat(1) {
-        thread {
-            println("T${Thread.currentThread().id}:: idx is ${barrier.await()}")
-        }
-    }
-
-    Thread.sleep(500)
-
-    barrier.reset()
-
-    repeat(3) {
-        thread {
-            println("T${Thread.currentThread().id}:: idx is ${barrier.await()}")
-        }
-    }
+    inner class Generation(var isBroken: Boolean)
 }

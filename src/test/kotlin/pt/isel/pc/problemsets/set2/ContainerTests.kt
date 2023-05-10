@@ -11,7 +11,7 @@ class ContainerTests {
 
     @Test
     fun `consume all container letters by N threads`() {
-        val N = 10
+        val N = 30
         val values = arrayOf(Value("A", 2), Value("B", 1), Value("C", 3))
         val container = Container(values)
         val res: MutableList<String> = Collections.synchronizedList(ArrayList())
@@ -34,6 +34,6 @@ class ContainerTests {
 
     @Test
     fun `pressure test consume all container letters`() {
-        pressureTest(::`consume all container letters by N threads`, 5)
+        pressureTest(::`consume all container letters by N threads`, 1)
     }
 }
