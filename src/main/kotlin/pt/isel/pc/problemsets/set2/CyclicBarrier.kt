@@ -32,7 +32,7 @@ class CyclicBarrier(private val parties: Int) {
                     barrierAction?.run()
                 } catch (e: Exception) {
                     gen.isBroken = true
-                    throw BrokenBarrierException()
+                    throw e
                 }
                 waiters.signalAll()
                 waitingThreads = 0
@@ -48,6 +48,7 @@ class CyclicBarrier(private val parties: Int) {
                     } catch (e: InterruptedException) {
                         gen.isBroken = true
                         waiters.signalAll()
+                        waitingThreads = 0
                         throw e
                     }
                 }
