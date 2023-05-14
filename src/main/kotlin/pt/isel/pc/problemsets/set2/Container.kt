@@ -4,7 +4,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 
 class Container<T>(private val values: Array<Value<T>>) {
-    @Volatile
+
      var index = AtomicInteger(0)
 
     fun consume(): T? {
@@ -25,6 +25,5 @@ class Container<T>(private val values: Array<Value<T>>) {
 }
 
 class Value<T>(val value: T, initialLives: Int) {
-    @Volatile
     var lives = AtomicInteger(initialLives)
 }

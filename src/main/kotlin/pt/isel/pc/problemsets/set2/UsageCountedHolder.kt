@@ -10,6 +10,8 @@ class UsageCountedHolder<T : Closeable>(value: T) {
     private var value = AtomicReference(value)
     private var useCounter = AtomicInteger(1)
 
+    val counter get() = useCounter.get()
+
     fun tryStartUse(): T? {
         while (true) {
             val counter = useCounter.get()
