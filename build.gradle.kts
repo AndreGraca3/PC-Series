@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "1.6.10"
+    kotlin("jvm") version "1.8.0"
 }
 
 group = "pt.isel.pc"
@@ -15,8 +15,9 @@ val ktlint: Configuration by configurations.creating
 
 dependencies {
 
-    implementation("org.slf4j:slf4j-api:1.7.36")
-    implementation("org.slf4j:slf4j-simple:2.0.0-alpha7")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.1")
+    implementation("org.slf4j:slf4j-api:2.0.5")
+    implementation("org.slf4j:slf4j-simple:2.0.5")
 
     testImplementation(kotlin("test"))
 
@@ -25,6 +26,7 @@ dependencies {
             attribute(Bundling.BUNDLING_ATTRIBUTE, objects.named(Bundling.EXTERNAL))
         }
     }
+    implementation(kotlin("stdlib-jdk8"))
 }
 
 tasks.test {
@@ -49,4 +51,12 @@ val ktlintCheck by tasks.creating(JavaExec::class) {
 
 tasks.named("check") {
     dependsOn("ktlintCheck")
+}
+val compileKotlin: KotlinCompile by tasks
+compileKotlin.kotlinOptions {
+    jvmTarget = "1.8"
+}
+val compileTestKotlin: KotlinCompile by tasks
+compileTestKotlin.kotlinOptions {
+    jvmTarget = "1.8"
 }
